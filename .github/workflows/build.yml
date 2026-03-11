@@ -14,14 +14,7 @@ permissions:
   contents: write
 
 env:
-  # BitNet-b1.58-2B-4T reuses the 3B kernel dimensions
   CODEGEN_MODEL: "bitnet_b1_58-3B"
-  CODEGEN_BM_ARM: "160,320,320"
-  CODEGEN_BK_ARM: "64,128,64"
-  CODEGEN_bm_ARM: "32,64,32"
-  CODEGEN_BM_X86: "160,320,320"
-  CODEGEN_BK_X86: "96,96,96"
-  CODEGEN_bm_X86: "32,32,32"
 
 jobs:
   build-macos-arm64:
@@ -45,9 +38,9 @@ jobs:
         run: |
           python utils/codegen_tl1.py \
             --model "$CODEGEN_MODEL" \
-            --BM "$CODEGEN_BM_ARM" \
-            --BK "$CODEGEN_BK_ARM" \
-            --bm "$CODEGEN_bm_ARM"
+            --BM 160,320,320 \
+            --BK 64,128,64 \
+            --bm 32,64,32
 
       - name: Build
         run: |
@@ -95,9 +88,9 @@ jobs:
         run: |
           python utils/codegen_tl2.py \
             --model "$CODEGEN_MODEL" \
-            --BM "$CODEGEN_BM_X86" \
-            --BK "$CODEGEN_BK_X86" \
-            --bm "$CODEGEN_bm_X86"
+            --BM 160,320,320 \
+            --BK 96,96,96 \
+            --bm 32,32,32
 
       - name: Build
         run: |
@@ -139,9 +132,9 @@ jobs:
         run: |
           python utils/codegen_tl2.py `
             --model "$env:CODEGEN_MODEL" `
-            --BM "$env:CODEGEN_BM_X86" `
-            --BK "$env:CODEGEN_BK_X86" `
-            --bm "$env:CODEGEN_bm_X86"
+            --BM "160,320,320" `
+            --BK "96,96,96" `
+            --bm "32,32,32"
 
       - name: Build
         run: |
