@@ -1,0 +1,182 @@
+name: Build BitNet
+
+on:
+  workflow_dispatch:
+    inputs:
+      bitnet_ref:
+        description: 'BitNet repo ref (branch/tag/commit)'
+        required: false
+        default: 'main'
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  # BitNet-b1.58-2B-4T reuses the 3B kernel dimensions
+  CODEGEN_MODEL: "bitnet_b1_58-3B"
+  CODEGEN_BM_ARM: "160,320,320"
+  CODEGEN_BK_ARM: "64,128,64"
+  CODEGEN_bm_ARM: "32,64,32"
+  CODEGEN_BM_X86: "160,320,320"
+  CODEGEN_BK_X86: "96,96,96"
+  CODEGEN_bm_X86: "32,32,32"
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Checkout BitNet
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/BitNet
+          ref: ${{ github.event.inputs.bitnet_ref || 'main' }}
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: brew install llvm cmake
+
+      - name: Generate kernels (ARM64 TL1)
+        run: |
+          python utils/codegen_tl1.py \
+            --model "$CODEGEN_MODEL" \
+            --BM "$CODEGEN_BM_ARM" \
+            --BK "$CODEGEN_BK_ARM" \
+            --bm "$CODEGEN_bm_ARM"
+
+      - name: Build
+        run: |
+          export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+          cmake -B build \
+            -DBITNET_ARM_TL1=OFF \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/bin/llama-server dist/bitnet-server
+          cp build/bin/llama-cli dist/bitnet-cli
+          chmod +x dist/*
+          cd dist && tar czf ../bitnet-macos-arm64.tar.gz *
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bitnet-macos-arm64
+          path: bitnet-macos-arm64.tar.gz
+
+  build-linux-x64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout BitNet
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/BitNet
+          ref: ${{ github.event.inputs.bitnet_ref || 'main' }}
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Clang 18 + CMake
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
+          sudo apt-get install -y cmake
+
+      - name: Generate kernels (x86_64 TL2)
+        run: |
+          python utils/codegen_tl2.py \
+            --model "$CODEGEN_MODEL" \
+            --BM "$CODEGEN_BM_X86" \
+            --BK "$CODEGEN_BK_X86" \
+            --bm "$CODEGEN_bm_X86"
+
+      - name: Build
+        run: |
+          cmake -B build \
+            -DBITNET_X86_TL2=OFF \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/bin/llama-server dist/bitnet-server
+          cp build/bin/llama-cli dist/bitnet-cli
+          chmod +x dist/*
+          cd dist && tar czf ../bitnet-linux-x64.tar.gz *
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bitnet-linux-x64
+          path: bitnet-linux-x64.tar.gz
+
+  build-windows-x64:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout BitNet
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/BitNet
+          ref: ${{ github.event.inputs.bitnet_ref || 'main' }}
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate kernels (x86_64 TL2)
+        run: |
+          python utils/codegen_tl2.py `
+            --model "$env:CODEGEN_MODEL" `
+            --BM "$env:CODEGEN_BM_X86" `
+            --BK "$env:CODEGEN_BK_X86" `
+            --bm "$env:CODEGEN_bm_X86"
+
+      - name: Build
+        run: |
+          cmake -B build `
+            -DBITNET_X86_TL2=OFF `
+            -T ClangCL `
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: Package
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item build/bin/Release/llama-server.exe dist/bitnet-server.exe
+          Copy-Item build/bin/Release/llama-cli.exe dist/bitnet-cli.exe
+          Compress-Archive -Path dist/* -DestinationPath bitnet-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bitnet-windows-x64
+          path: bitnet-windows-x64.zip
+
+  release:
+    needs: [build-macos-arm64, build-linux-x64, build-windows-x64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/bitnet-macos-arm64/bitnet-macos-arm64.tar.gz
+            artifacts/bitnet-linux-x64/bitnet-linux-x64.tar.gz
+            artifacts/bitnet-windows-x64/bitnet-windows-x64.zip
+          generate_release_notes: true
