@@ -157,7 +157,9 @@ jobs:
           cmake -B build `
             -DBITNET_X86_TL2=OFF `
             -T ClangCL `
-            -DCMAKE_CXX_FLAGS="/std:c++17 /EHsc" `
+            -DCMAKE_CXX_STANDARD=17 `
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
+            -DCMAKE_CXX_FLAGS="/EHsc" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
 
