@@ -144,6 +144,12 @@ jobs:
         run: |
           (Get-Content src/ggml-bitnet-mad.cpp) -replace 'int8_t \* y_col = y','const int8_t * y_col = y' | Set-Content src/ggml-bitnet-mad.cpp
 
+      - name: Patch CMakeLists to set C++17
+        run: |
+          $content = Get-Content CMakeLists.txt -Raw
+          $content = $content -replace 'set\(CMAKE_CXX_STANDARD_REQUIRED true\)', "set(CMAKE_CXX_STANDARD 17)`nset(CMAKE_CXX_STANDARD_REQUIRED true)"
+          Set-Content CMakeLists.txt $content
+
       - name: Generate kernels (x86_64 TL2)
         run: |
           python utils/codegen_tl2.py `
@@ -157,8 +163,6 @@ jobs:
           cmake -B build `
             -DBITNET_X86_TL2=OFF `
             -T ClangCL `
-            -DCMAKE_CXX_STANDARD=17 `
-            -DCMAKE_CXX_STANDARD_REQUIRED=ON `
             -DCMAKE_CXX_FLAGS="/EHsc" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
