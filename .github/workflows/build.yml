@@ -144,11 +144,9 @@ jobs:
         run: |
           (Get-Content src/ggml-bitnet-mad.cpp) -replace 'int8_t \* y_col = y','const int8_t * y_col = y' | Set-Content src/ggml-bitnet-mad.cpp
 
-      - name: Patch CMakeLists to set C++17
+      - name: Patch missing chrono include
         run: |
-          $content = Get-Content CMakeLists.txt -Raw
-          $content = $content -replace 'set\(CMAKE_CXX_STANDARD_REQUIRED true\)', "set(CMAKE_CXX_STANDARD 17)`nset(CMAKE_CXX_STANDARD_REQUIRED true)"
-          Set-Content CMakeLists.txt $content
+          (Get-Content 3rdparty/llama.cpp/common/log.cpp) -replace '#include "log.h"', "#include `"log.h`"`n#include <chrono>" | Set-Content 3rdparty/llama.cpp/common/log.cpp
 
       - name: Generate kernels (x86_64 TL2)
         run: |
