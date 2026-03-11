@@ -144,9 +144,17 @@ jobs:
         run: |
           (Get-Content src/ggml-bitnet-mad.cpp) -replace 'int8_t \* y_col = y','const int8_t * y_col = y' | Set-Content src/ggml-bitnet-mad.cpp
 
-      - name: Patch missing chrono includes
+      - name: Patch missing chrono includes for ClangCL
         run: |
-          (Get-Content 3rdparty/llama.cpp/common/common.h) -replace '#include <string>', "#include <string>`n#include <chrono>" | Set-Content 3rdparty/llama.cpp/common/common.h
+          $files = Get-ChildItem -Path 3rdparty/llama.cpp -Recurse -Include *.cpp,*.h
+          foreach ($f in $files) {
+            $content = Get-Content $f.FullName -Raw
+            if ($content -match 'std::chrono' -and $content -notmatch '#include\s*<chrono>') {
+              $content = "#include <chrono>`n" + $content
+              Set-Content $f.FullName $content
+              Write-Host "Patched: $($f.FullName)"
+            }
+          }
 
       - name: Generate kernels (x86_64 TL2)
         run: |
