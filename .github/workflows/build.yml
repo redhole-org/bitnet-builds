@@ -148,11 +148,16 @@ jobs:
         run: |
           $files = Get-ChildItem -Path 3rdparty/llama.cpp -Recurse -Include *.cpp,*.h
           foreach ($f in $files) {
-            $content = Get-Content $f.FullName -Raw
-            if ($content -match 'std::chrono' -and $content -notmatch '#include\s*<chrono>') {
-              $content = "#include <chrono>`n" + $content
-              Set-Content $f.FullName $content
-              Write-Host "Patched: $($f.FullName)"
+            if (-not (Test-Path $f.FullName)) { continue }
+            try {
+              $content = Get-Content $f.FullName -Raw -ErrorAction Stop
+              if ($content -match 'std::chrono' -and $content -notmatch '#include\s*<chrono>') {
+                $content = "#include <chrono>`n" + $content
+                Set-Content $f.FullName $content
+                Write-Host "Patched: $($f.FullName)"
+              }
+            } catch {
+              Write-Host "Skipped (unreadable): $($f.FullName)"
             }
           }
 
